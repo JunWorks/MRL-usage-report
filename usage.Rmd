@@ -1,0 +1,116 @@
+---
+title: "MRL Equipment Usage Report"
+author: "Jun"
+date: "January 23, 2016"
+output: html_document
+---
+
+## MRL @Illinois
+
+The materials research laboratory (MRL) is an interdisciplinary research laboratory focused on fundamental issues in materials science. It hosts a large collection of equipments for researchers to use. I, as a graduate student focusing on nanoscale heat transfer in materials, have been using the micro fabrication tools since I started. However, recently many of the tools I use have been down for a prolonged time. This is frustrating especially when I am finishing up my last set of experiments for my PhD defense. So, I decided to scrape the data from MRL instrument schedule and see how much usage for each tool in the past year.
+
+## Data type
+
+Let's first take a look at the webpage.
+
+<div style="width:600px; height=400px">
+![Schedule](schedule.tiff)
+</div>
+
+The data stored in this page is in an HTML table. However, the table only gives the text info on the schedule. 
+
+```{r, message=FALSE}
+library(XML)
+library(dplyr)
+library(ggplot2)
+library(knitr)
+library(lubridate)
+
+usage.url <- 'http://cmmserv.mrl.illinois.edu/microfabschedule/guest/npTimeSlots.asp?BW=2016-01-17&GI=0'
+usage <- htmlTreeParse(usage.url, error=function(...){}, useInternalNodes = TRUE)
+readHTMLTable(usage, as.data.frame=TRUE, stringsAsFactors=FALSE)[[1]]
+```
+To get the time slots that have been booked, I need to go into the file and look for bgcolor attributes using the following code `inUse <- length(xpathSApply(usage, "//td[@bgcolor !='#FFFFFF']",xmlValue))`. Once I have the time slots with `bgcolor != '#FFFFFF'`, the total booked time of that week can be calculated by $Number_{nonwhite} \times 0.5 hr$. Now let's find all the equipments and loop through past year.
+
+## Usage in past year
+
+To get the equipment list:
+```{r, cache=TRUE}
+eq.url <- "http://cmmserv.mrl.illinois.edu/microfabschedule/guest/npMonthView.asp?QM=1&QY=2016&GI=0"
+eq <- htmlTreeParse(eq.url, error=function(...){}, useInternalNodes = TRUE)
+eq <- xpathSApply(eq,"//select[@name ='GI']/option",xmlValue)
+
+eq.df <- data.frame(GI = seq(0, 38, by = 1), equipment = eq)
+head(eq.df)
+```
+
+To find all the booked time slots as well as down time for each equipment:
+```{r, cache=TRUE}
+dates <- seq(from=as.Date("2015-01-01"), to=as.Date("2016-01-23"), by="day")
+
+dates <- strptime(dates, "%Y-%m-%d")
+sunday <- as.character(format(dates[dates$wday==0], '%D'))
+usage.df <- data.frame(matrix(ncol = 4, nrow = 0))
+
+
+for (i in eq.df[,1]){
+  
+  for (day in sunday){
+  usage.url <- paste('http://cmmserv.mrl.illinois.edu/microfabschedule/guest/npTimeSlots.asp?BW=', day, '&GI=', i, sep = '')
+  usage <- htmlTreeParse(usage.url, error=function(...){}, useInternalNodes = TRUE)
+  inUse <- length(xpathSApply(usage, "//td[@bgcolor !='#FFFFFF']",xmlValue))
+  down <- length(c(xpathSApply(usage, "//td[@bgcolor ='#999999']",xmlValue), xpathSApply(usage, "//td[@bgcolor ='#777777']",xmlValue)))
+  use.time <- inUse * 0.5
+  down.time <- down*0.5
+  usage.df<- rbind(usage.df, data.frame(day, as.character(eq.df[i+1, 2]), use.time, down.time, use.time-down.time))
+}
+}
+
+colnames(usage.df) <- c('startingSunday', 'equipment', 'hours', 'down', 'realHours')
+```
+
+Let's plot the equipments that have been used over 100 hours in the past year.
+
+```{r}
+usage.by.eq <- usage.df %>%
+  group_by(equipment) %>%
+  summarise(hours = sum(hours), down = sum(down), realHours = sum(realHours)) %>%
+  arrange(realHours)
+
+filtered <- filter(usage.by.eq, realHours>100)
+
+ggplot(data = filtered, aes(x=equipment, y=realHours, fill = realHours)) + geom_bar(stat = 'identity') +
+  scale_x_discrete(limits=unique(filtered$equipment)) + coord_flip() +
+  ylim(0, 3500) + theme_bw(15) + theme(axis.title.y = element_blank(), legend.position = c(0.8, 0.5))
+```
+
+And the equipments suffered a significant amount of down times.
+
+```{r}
+filtered <- filtered %>%
+  filter(down>0) %>%
+  arrange(down)
+
+ggplot(data = filtered, aes(x=equipment, y=down, fill = down)) + geom_bar(stat = 'identity') +
+  scale_x_discrete(limits=unique(filtered$equipment)) + coord_flip() +
+  ylim(0, 3000) + theme_bw(15) + theme(axis.title.y = element_blank(), legend.position = c(0.8, 0.5))
+```
+
+```{r}
+usage.by.month <- usage.df %>%
+  mutate(month = month(as.Date(startingSunday, "%m/%d/%y"))) %>%
+  group_by(equipment, month) %>%
+  summarise(hours = sum(hours), down = sum(down), realHours = sum(realHours)) %>%
+  filter(equipment %in% c('Atomic Layer Deposition', 'Raith e-Line', 'E-beam Evaporator 2'))
+
+ggplot(data = usage.by.month, aes(x=month, y=realHours, fill = realHours)) + geom_bar(stat = 'identity') + 
+  scale_x_discrete(limits=unique(usage.by.month$month)) +
+  facet_wrap(~equipment, ncol = 1) +
+  theme_bw(15) + theme(axis.title.y = element_blank())
+    
+    
+    
+    
+
+
+```
