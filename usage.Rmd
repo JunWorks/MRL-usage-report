@@ -81,6 +81,7 @@ filtered <- filter(usage.by.eq, realHours>100)
 
 ggplot(data = filtered, aes(x=equipment, y=realHours, fill = realHours)) + geom_bar(stat = 'identity') +
   scale_x_discrete(limits=unique(filtered$equipment)) + coord_flip() +
+  scale_fill_continuous(name="Hours") + ylab('Hours') +
   ylim(0, 3500) + theme_bw(15) + theme(axis.title.y = element_blank(), legend.position = c(0.8, 0.5))
 ```
 
@@ -93,6 +94,7 @@ filtered <- filtered %>%
 
 ggplot(data = filtered, aes(x=equipment, y=down, fill = down)) + geom_bar(stat = 'identity') +
   scale_x_discrete(limits=unique(filtered$equipment)) + coord_flip() +
+  scale_fill_continuous(name="Hours") + ylab('Hours') +
   ylim(0, 3000) + theme_bw(15) + theme(axis.title.y = element_blank(), legend.position = c(0.8, 0.5))
 ```
 
@@ -106,6 +108,7 @@ usage.by.month <- usage.df %>%
 ggplot(data = usage.by.month, aes(x=month, y=realHours, fill = realHours)) + geom_bar(stat = 'identity') + 
   scale_x_discrete(limits=unique(usage.by.month$month)) +
   facet_wrap(~equipment, ncol = 1) +
+  scale_fill_continuous(name="Hours") + 
   theme_bw(15) + theme(axis.title.y = element_blank())
     
     
